@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MetaFeed Auto-Pair</title>
+<script src="https://tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white p-4 font-sans">
+<div class="max-w-6xl mx-auto space-y-4">
+  <header class="bg-blue-950 p-4 rounded-xl flex flex-wrap gap-3 justify-between items-center border border-blue-800">
+    <div>
+      <h1 class="font-bold text-base text-blue-200">⚡ MetaFeed AI Auto-Pair</h1>
+      <p id="status" class="text-xs text-emerald-400">Loading...</p>
+    </div>
+    <div class="flex flex-wrap gap-2 items-center">
+      <input type="date" id="dayPick" onchange="loadGames()" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs">
+      <button onclick="autoPair()" class="bg-emerald-600 px-3 py-1.5 rounded text-xs font-bold">🤖 Auto-Pair Now</button>
+      <button onclick="addGame()" class="bg-blue-600 px-3 py-1.5 rounded text-xs font-bold">+ Add Game</button>
+      <span class="bg-slate-900 px-3 py-1.5 rounded text-xs text-amber-300 font-bold">PTS: <b id="pts">0</b></span>
+    </div>
+  </header>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+      <h2 class="text-xs font-bold text-blue-300 uppercase mb-3">1. Master Games (By Time)</h2>
+      <div id="mList" class="space-y-4"></div>
+    </div>
+    <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+      <h2 class="text-xs font-bold text-orange-300 uppercase mb-3">2. Feeds to Pair (By Time)</h2>
+      <div id="fList" class="space-y-4"></div>
+    </div>
+  </div>
+</div>
+<script>
+let pts=0,sel=null,masters=[],feeds=[];
+const dEl=document.getElementById("dayPick");
+dEl.value=new Date().toISOString().split("T")[0];
+
+async function loadGames(){
+  const d=dEl.value,dc=d.replace(/-/g,"");
+  document.getElementById("status").innerText="Syncing "+d+"...";
+  try{
+    const c=await fetch("./data/paired-matches.json?t="+Date.now());
+    if(c.ok){const j=await c.json();if(j.date===d&&j.matches?.length){masters=j.matches;feeds=[];render();return;}}
+  }catch(_){}
+  masters=[];feeds=[];
+  const urls=["soccer/all","basketball/nba","football/nfl"];
+  for(const u of urls){
+    try{
+      const r=await(await fetch(`https://espn.com{u}/scoreboard?dates=${dc}`)).json();
+      (r.events||[]).forEach((e,i)=>{
+        const c=e.competitions?.[0];if(!c||c.competitors.length<2)return;
+        const a=c.competitors[0].team,b=c.competitors[1].team,t=new Date(e.date).toTimeString().slice(0,5);
+        masters.push({id:e.id,date:d,time:t,name:`${a.displayName} vs ${b.displayName}`,ok:false});
+        feeds.push({id:"f"+e.id,date:d,time:t,raw:`${a.abbreviation} @ ${b.abbreviation}`,ok:false});
+      });
+    }catch(_){}
+  }
+  autoPair();
+}
+function autoPair(){
+  feeds.forEach(f=>{
+    if(f.ok)return;
+    const m=masters.find(x=>x.date===f.date&&x.time===f.time&&!x.ok);
+    if(m){f.ok=true;m.ok=true;pts+=50;}
+  });
+  document.getElementById("pts").innerText=pts;
+  document.getElementById("status").innerText="Ready ("+masters.filter(x=>x.ok).length+" Paired)";
+  render();
+}
+function render(){
+  const ml=document.getElementById("mList"),fl=document.getElementById("fList");
+  ml.innerHTML="";fl.innerHTML="";
+  [...new Set(masters.map(x=>x.time))].sort().forEach(t=>{
+    ml.innerHTML+=`<div class="text-xs text-blue-400 font-bold">🕒 ${t}</div>`+
+      masters.filter(x=>x.time===t).map(m=>`<div onclick="sel='${m.id}';render()" class="p-2.5 rounded border text-xs flex justify-between ${sel===m.id?'border-blue-400 bg-blue-950':'border-slate-800 bg-slate-950'}"><span>${m.name}</span><b class="${m.ok?'text-emerald-400':'text-slate-500'}">${m.ok?'✓ PAIRED':'Select'}</b></div>`).join("");
+  });
+  [...new Set(feeds.filter(x=>!x.ok).map(x=>x.time))].sort().forEach(t=>{
+    fl.innerHTML+=`<div class="text-xs text-orange-400 font-bold">🕒 ${t}</div>`+
+      feeds.filter(x=>!x.ok&&x.time===t).map(f=>`<div onclick="manualPair('${f.id}')" class="p-2.5 rounded border border-slate-800 bg-slate-950 text-xs flex justify-between"><span>${f.raw}</span><b class="text-emerald-400">Pair ➔</b></div>`).join("");
+  });
+}
+function manualPair(fid){
+  if(!sel)return alert("Pumili muna ng laro sa kaliwa!");
+  const f=feeds.find(x=>x.id===fid),m=masters.find(x=>x.id===sel);
+  f.ok=true;m.ok=true;sel=null;pts+=100;document.getElementById("pts").innerText=pts;render();
+}
+function addGame(){
+  const n=prompt("Pangalan ng laro (hal. Lakers vs Heat):");if(!n)return;
+  const t=prompt("Oras (hal. 20:00):","20:00")||"20:00";
+  masters.push({id:"c"+Date.now(),date:dEl.value,time:t,name:n,ok:false});autoPair();
+}
+loadGames();
+</script>
+</body>
+</html>
