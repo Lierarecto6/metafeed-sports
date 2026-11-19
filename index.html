@@ -1,95 +1,23 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MetaFeed Auto-Pair</title>
-<script src="https://tailwindcss.com"></script>
-</head>
-<body class="bg-slate-950 text-white p-4 font-sans">
-<div class="max-w-6xl mx-auto space-y-4">
-  <header class="bg-blue-950 p-4 rounded-xl flex flex-wrap gap-3 justify-between items-center border border-blue-800">
-    <div>
-      <h1 class="font-bold text-base text-blue-200">⚡ MetaFeed AI Auto-Pair</h1>
-      <p id="status" class="text-xs text-emerald-400">Loading...</p>
-    </div>
-    <div class="flex flex-wrap gap-2 items-center">
-      <input type="date" id="dayPick" onchange="loadGames()" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs">
-      <button onclick="autoPair()" class="bg-emerald-600 px-3 py-1.5 rounded text-xs font-bold">🤖 Auto-Pair Now</button>
-      <button onclick="addGame()" class="bg-blue-600 px-3 py-1.5 rounded text-xs font-bold">+ Add Game</button>
-      <span class="bg-slate-900 px-3 py-1.5 rounded text-xs text-amber-300 font-bold">PTS: <b id="pts">0</b></span>
-    </div>
-  </header>
-  <div class="grid md:grid-cols-2 gap-4">
-    <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
-      <h2 class="text-xs font-bold text-blue-300 uppercase mb-3">1. Master Games (By Time)</h2>
-      <div id="mList" class="space-y-4"></div>
-    </div>
-    <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
-      <h2 class="text-xs font-bold text-orange-300 uppercase mb-3">2. Feeds to Pair (By Time)</h2>
-      <div id="fList" class="space-y-4"></div>
-    </div>
-  </div>
-</div>
+<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{background:#020617;color:#fff;font-family:sans-serif;padding:12px}
+.top{background:#172554;padding:12px;border-radius:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+input,button{padding:7px 10px;border-radius:6px;border:0;font-weight:700;font-size:12px}
+.b1{background:#059669;color:#fff}.b2{background:#2563eb;color:#fff}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}@media(max-width:700px){.grid{grid-template-columns:1fr}}
+.box{background:#0f172a;padding:12px;border-radius:10px;border:1px solid #1e293b}
+.tm{color:#60a5fa;font-size:11px;font-weight:800;margin:8px 0 4px}
+.c{background:#020617;border:1px solid #334155;padding:9px;border-radius:6px;margin-bottom:5px;display:flex;justify-content:space-between;font-size:12px}
+.sel{border-color:#3b82f6;background:#1e3a8a}
+</style></head><body>
+<div class="top"><b>⚡ MetaFeed AI Auto-Pair</b><div><input type="date" id="dp" onchange="load()"> <button class="b1" onclick="auto()">🤖 Auto-Pair</button> <button class="b2" onclick="add()">+ Add</button> <b id="pt" style="color:#fcd34d">0 PTS</b></div></div>
+<div class="grid"><div class="box"><b style="color:#60a5fa;font-size:12px">1. MASTER GAMES</b><div id="ml"></div></div><div class="box"><b style="color:#fb923c;font-size:12px">2. FEEDS TO PAIR</b><div id="fl"></div></div></div>
 <script>
-let pts=0,sel=null,masters=[],feeds=[];
-const dEl=document.getElementById("dayPick");
-dEl.value=new Date().toISOString().split("T")[0];
-
-async function loadGames(){
-  const d=dEl.value,dc=d.replace(/-/g,"");
-  document.getElementById("status").innerText="Syncing "+d+"...";
-  try{
-    const c=await fetch("./data/paired-matches.json?t="+Date.now());
-    if(c.ok){const j=await c.json();if(j.date===d&&j.matches?.length){masters=j.matches;feeds=[];render();return;}}
-  }catch(_){}
-  masters=[];feeds=[];
-  const urls=["soccer/all","basketball/nba","football/nfl"];
-  for(const u of urls){
-    try{
-      const r=await(await fetch(`https://espn.com{u}/scoreboard?dates=${dc}`)).json();
-      (r.events||[]).forEach((e,i)=>{
-        const c=e.competitions?.[0];if(!c||c.competitors.length<2)return;
-        const a=c.competitors[0].team,b=c.competitors[1].team,t=new Date(e.date).toTimeString().slice(0,5);
-        masters.push({id:e.id,date:d,time:t,name:`${a.displayName} vs ${b.displayName}`,ok:false});
-        feeds.push({id:"f"+e.id,date:d,time:t,raw:`${a.abbreviation} @ ${b.abbreviation}`,ok:false});
-      });
-    }catch(_){}
-  }
-  autoPair();
-}
-function autoPair(){
-  feeds.forEach(f=>{
-    if(f.ok)return;
-    const m=masters.find(x=>x.date===f.date&&x.time===f.time&&!x.ok);
-    if(m){f.ok=true;m.ok=true;pts+=50;}
-  });
-  document.getElementById("pts").innerText=pts;
-  document.getElementById("status").innerText="Ready ("+masters.filter(x=>x.ok).length+" Paired)";
-  render();
-}
-function render(){
-  const ml=document.getElementById("mList"),fl=document.getElementById("fList");
-  ml.innerHTML="";fl.innerHTML="";
-  [...new Set(masters.map(x=>x.time))].sort().forEach(t=>{
-    ml.innerHTML+=`<div class="text-xs text-blue-400 font-bold">🕒 ${t}</div>`+
-      masters.filter(x=>x.time===t).map(m=>`<div onclick="sel='${m.id}';render()" class="p-2.5 rounded border text-xs flex justify-between ${sel===m.id?'border-blue-400 bg-blue-950':'border-slate-800 bg-slate-950'}"><span>${m.name}</span><b class="${m.ok?'text-emerald-400':'text-slate-500'}">${m.ok?'✓ PAIRED':'Select'}</b></div>`).join("");
-  });
-  [...new Set(feeds.filter(x=>!x.ok).map(x=>x.time))].sort().forEach(t=>{
-    fl.innerHTML+=`<div class="text-xs text-orange-400 font-bold">🕒 ${t}</div>`+
-      feeds.filter(x=>!x.ok&&x.time===t).map(f=>`<div onclick="manualPair('${f.id}')" class="p-2.5 rounded border border-slate-800 bg-slate-950 text-xs flex justify-between"><span>${f.raw}</span><b class="text-emerald-400">Pair ➔</b></div>`).join("");
-  });
-}
-function manualPair(fid){
-  if(!sel)return alert("Pumili muna ng laro sa kaliwa!");
-  const f=feeds.find(x=>x.id===fid),m=masters.find(x=>x.id===sel);
-  f.ok=true;m.ok=true;sel=null;pts+=100;document.getElementById("pts").innerText=pts;render();
-}
-function addGame(){
-  const n=prompt("Pangalan ng laro (hal. Lakers vs Heat):");if(!n)return;
-  const t=prompt("Oras (hal. 20:00):","20:00")||"20:00";
-  masters.push({id:"c"+Date.now(),date:dEl.value,time:t,name:n,ok:false});autoPair();
-}
-loadGames();
-</script>
-</body>
-</html>
+let pts=0,sel=null,M=[],F=[],dp=document.getElementById("dp");dp.value=new Date().toISOString().split("T");
+function load(){const d=dp.value;M=[{id:1,t:"18:00",n:"⚽ Real Madrid vs Liverpool",ok:0},{id:2,t:"18:00",n:"⚽ Man Utd vs Arsenal",ok:0},{id:3,t:"20:30",n:"🏀 Lakers vs Warriors",ok:0},{id:4,t:"22:00",n:"🏀 Celtics vs Heat",ok:0}];F=[{id:1,t:"18:00",r:"R. Madrid - Liverpool",ok:0},{id:2,t:"18:00",r:"Man Utd v Arsenal",ok:0},{id:3,t:"20:30",r:"LA Lakers @ GSW",ok:0},{id:4,t:"22:00",r:"Boston vs Miami",ok:0}];draw();}
+function auto(){F.forEach(f=>{if(!f.ok){let m=M.find(x=>x.t==f.t&&!x.ok);if(m){f.ok=m.ok=1;pts+=50;}}});draw();}
+function pair(id){if(!sel)return alert("Pumili muna sa kaliwa!");F.find(x=>x.id==id).ok=M.find(x=>x.id==sel).ok=1;sel=null;pts+=100;draw();}
+function add(){let n=prompt("Match name:"),t=prompt("Time (20:00):","20:00");if(n){M.push({id:Date.now(),t:t||"20:00",n,ok:0});draw();}}
+function draw(){document.getElementById("pt").innerText=pts+" PTS";ml.innerHTML=fl.innerHTML="";[...new Set(M.map(x=>x.t))].sort().forEach(t=>{ml.innerHTML+=`<div class="tm">🕒 ${t}</div>`+M.filter(x=>x.t==t).map(m=>`<div onclick="sel=${m.id};draw()" class="c ${sel==m.id?'sel':''}"><span>${m.n}</span><b style="color:${m.ok?'#34d399':'#94a3b8'}">${m.ok?'✓ PAIRED':'Select'}</b></div>`).join("");});[...new Set(F.filter(x=>!x.ok).map(x=>x.t))].sort().forEach(t=>{fl.innerHTML+=`<div class="tm">🕒 ${t}</div>`+F.filter(x=>!x.ok&&x.t==t).map(f=>`<div onclick="pair(${f.id})" class="c"><span>${f.r}</span><b style="color:#34d399">Pair ➔</b></div>`).join("");});if(!fl.innerHTML)fl.innerHTML="<p style='color:#34d399;font-size:12px'>✅ All Paired!</p>";}
+load();
+</script></body></html>
